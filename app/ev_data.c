@@ -270,10 +270,10 @@ typedef struct {
 } nav_step_t;
 
 static const nav_step_t nav_route[] = {
-    {  960, "To Santa Monica St.",   EV_NAV_RIGHT    },
-    { 1400, "Onto Ocean Ave",        EV_NAV_LEFT     },
-    {  420, "Continue on Ocean Ave", EV_NAV_STRAIGHT },
-    { 2100, "To Pacific Coast Hwy",  EV_NAV_RIGHT    },
+    {  960, "To Linking Road",       EV_NAV_RIGHT    },
+    { 1400, "Onto Carter Road",      EV_NAV_LEFT     },
+    {  420, "Continue on Carter Rd", EV_NAV_STRAIGHT },
+    { 2100, "To Worli Sea Face",     EV_NAV_RIGHT    },
 };
 #define NAV_STEPS (sizeof(nav_route) / sizeof(nav_route[0]))
 
