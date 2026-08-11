@@ -1,0 +1,7 @@
+build/
+build565/
+fonts/.ttf/
+*.bin
+*.exe
+*.o
+*.rsp
