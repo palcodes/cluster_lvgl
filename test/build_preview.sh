@@ -22,7 +22,15 @@ if [ ! -f "$LVGL_DIR/lvgl.h" ]; then
 fi
 
 mkdir -p "$OUT"
-find "$LVGL_DIR/src" -name '*.c' > "$OUT/lvgl_srcs.txt"
+
+# gcc.exe is a native Windows binary: it parses @response-file contents
+# itself, so bash's automatic /c/... -> C:\... argument translation never
+# touches this file. Rewriting to C:/... (forward slashes) rather than
+# `cygpath -w` is deliberate: cygpath emits backslashes, and gcc's
+# response-file parser treats backslash as an escape character, silently
+# eating them. Forward slashes are valid in Win32 paths and gcc reads
+# them correctly.
+find "$LVGL_DIR/src" -name '*.c' | sed -E 's#^/([a-zA-Z])/#\1:/#' > "$OUT/lvgl_srcs.txt"
 
 gcc -O1 -Wall -Wextra -DLV_CONF_INCLUDE_SIMPLE \
     -I"$CONF_DIR" -I"$LVGL_DIR" -I"$ROOT/ui" -I"$ROOT/app" \
