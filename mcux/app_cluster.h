@@ -1,40 +1,30 @@
 /*
  * app_cluster.h
  *
- * The three calls that connect the cluster to an MCUXpresso SDK project.
- * Everything above them is portable LVGL; everything below is the SDK's
- * display_support / lv_port_disp / lv_port_indev, which you keep as-is.
+ * The three calls an MCUXpresso project needs to host this cluster.  Drop
+ * these in place of whatever lv_demo_* the SDK example was running; see
+ * mcux/README.md for the rest of the bring-up.
  */
 
 #ifndef APP_CLUSTER_H
 #define APP_CLUSTER_H
 
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 /**
- * Build the screen and start the data layer.
- * Call once, after lv_init() + lv_port_disp_init() + lv_port_indev_init().
+ * Build the screen and seed it with the design's values.  Call once, after
+ * lv_init() and after the display driver is registered.
  */
 void app_cluster_init(void);
 
-/**
- * Service LVGL.  Call from your main loop (bare metal) or from the LVGL
- * task (FreeRTOS).  Returns the number of milliseconds until it next
- * wants servicing, which you can feed to vTaskDelay().
- */
+/** Call in place of lv_timer_handler().  Returns the same thing it does. */
 uint32_t app_cluster_poll(void);
 
-/**
- * Advance LVGL's clock by 1 ms.  Call from SysTick_Handler(), a PIT ISR,
- * or wherever your project already has a 1 kHz tick.
- *
- * Skip this if your lv_conf.h sets LV_TICK_CUSTOM 1 - LVGL then reads the
- * time itself and calling this as well would run the clock at double rate.
- */
+/** Call from a 1 ms tick if the port does not already drive lv_tick_inc(). */
 void app_cluster_tick_1ms(void);
 
 #ifdef __cplusplus

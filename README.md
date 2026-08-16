@@ -1,30 +1,25 @@
-# EV Scooter Cluster — LVGL 8.3
+# Cluster — Dashboard v2
 
-A single-screen instrument cluster for an electric two-wheeler. Pure black
-ground, one electric-blue light source, ultra-light geometric numerals, and a
-halo of counter-rotating rings that never quite repeats.
+An 800 × 480 instrument cluster for an electric two-wheeler, built in LVGL
+8.3 from the Figma frame **Dashboard - v2**
+([node 1:2](https://www.figma.com/design/u7aoLFxLjCtp1zq2fgMUdD/randoms?node-id=1-2&m=dev)).
 
 ![STREET](docs/preview-street.png)
 
-STREET — the default. Blue-deep to ice along the speed ring.
+That is a real frame rendered from this code, not the design. It differs
+from the Figma export on **3.35 %** of pixels by more than 8/255, and
+essentially all of that is glyph antialiasing — every element's ink lands
+within one pixel of where the frame puts it. `test/compare_to_figma.py`
+prints the table.
 
-![RUSH](docs/preview-rush.png)
+| | |
+|---|---|
+| **Target** | LVGL 8.3, 800 × 480 |
+| **Type** | Bai Jamjuree Medium + Jura SemiBold/Bold (both SIL OFL) |
+| **Flash** | 131 KB of assets — 79 KB type, 52 KB images |
+| **RAM** | 384 KB for the backdrop, 96 KB for `LV_MEM_SIZE` |
 
-RUSH — violet to pink, regenerating (`-1.8 kW`), left indicator blinking,
-navigation calling a left turn in 560 m.
-
-![CRAWL](docs/preview-crawl.png)
-
-CRAWL — teal. ![boot](docs/preview-boot.png)
-
-Boot at 700 ms: ring mid-sweep, halo spinning up, footer chips still arriving.
-
-Every image is a real frame rendered from this code, not a mockup.
-
-- **Target:** LVGL 8.3
-- **Resolution:** 800 × 480
-- **Type:** Outfit (SIL OFL) at six sizes + a FontAwesome icon subset — 62.6 KB
-  of flash for all eight faces. No Montserrat anywhere.
+No animations yet, by request.
 
 ---
 
@@ -32,11 +27,12 @@ Every image is a real frame rendered from this code, not a mockup.
 
 | Region | Shows |
 |---|---|
-| Top strip | Drawn battery + SoC, charging bolt, ride mode, head lamp, turn indicators, ambient temp, clock, link status |
-| Left column | Turn-by-turn: manoeuvre arrow, distance, street; Trip A; motor temp |
-| Centre | Speed ring with gradient fill, three drifting halo rings, breathing bloom, the speed readout |
-| Right column | Range; power in kW with a symmetrical regen/drive bar; cell temp |
-| Footer | Odometer, STREET / CRAWL / RUSH selector, ride time |
+| Status strip | Clock, state of charge, battery, navigation and Bluetooth lamps, network |
+| Top left | Warning lamp with its halo, low-beam headlamp, the node 1:6 tell-tale |
+| Centre | Turn-by-turn disc, street and distance; the speed numeral; both turn indicators |
+| Left column | Ride-mode selector — the active mode in a glowing pill, the one either side of it above and below |
+| Right column | Odometer and the range panel |
+| Bottom | The AUTO BALANCE curve, its marker and the hint line |
 
 ---
 
@@ -44,69 +40,114 @@ Every image is a real frame rendered from this code, not a mockup.
 
 ```
 ui/
-  ui_theme.h      design tokens: palette, geometry, mode gradients
-  ui_fonts.h      font declarations + FontAwesome code points
-  ui_dash.h/.c    the screen, its animations, and the drivers that move it
-  ui_events.c     ride-mode chip handlers
+  cl_theme.h      geometry and colour, every constant tagged with its node id
+  cl_fonts.h/.c   the ten faces, and the leading each one needs
+  cl_icons.h      declarations for the generated image data
+  cl_pool.h/.c    the backdrop gradient, expanded at start-up
+  cl_screen.h/.c  the screen
 app/
-  ev_data.h/.c    the vehicle boundary: ev_data_set_*() + a demo ride
+  cluster_data.h/.c   the vehicle boundary: cluster_set_*()
 fonts/
-  ev_font_*.c     generated faces
-  generate.sh     regenerate them from scratch
+  cl_font_*.c     generated faces
+  generate.sh     refetch and rebuild them
+icons/
+  svg/            the assets Figma exported — the source of truth
+  cl_icon_*.c     rasterised alpha maps
+  cl_glow_pill.c  cl_shade_panel.c  cl_pool_src.c   computed alpha maps
+  generate.py     rasteriser and gradient baker
 sim/
-  main_win32.c    Windows 11 runner: Win32 + GDI, no SDL, no dependencies
-  lv_conf.h       PC config (32-bit colour)
+  main_win32.c    Win32 + GDI runner, no SDL and no dependencies
+  lv_conf.h       PC config, 32-bit colour
   build.sh        build via git bash / MSYS2
   build.bat       build via cmd
-mcux/
-  lv_conf.h       i.MX RT1170 config (RGB565)
-  app_cluster.h/.c   the three-call seam into an SDK project
-  README.md       full hardware bring-up guide
 test/
-  render_preview.c / raw_to_png.py / build_preview.sh
+  render_preview.c      headless render to a raw framebuffer
+  build_preview.sh      build and run it, then convert to PNG
+  raw_to_png.py         framebuffer to PNG, 16 or 32 bit
+  compare_to_figma.py   measure a render against the design
+mcux/
+  lv_conf.h       i.MX RT1170 config, RGB565
+  app_cluster.h/.c    the three-call seam into an SDK project
+  README.md       hardware bring-up
+archive/
+  the previous cluster, kept whole
 ```
 
-`ui/` knows nothing about where numbers come from; `app/` knows nothing about
-how they are drawn. Swapping the demo for a real CAN feed touches one file.
+`ui/` knows nothing about where numbers come from and `app/` knows nothing
+about how they are drawn. Swapping the seeded values for a real CAN feed
+touches one file.
 
 ---
 
 ## Running it
 
-### On Windows 11
+### Headless — the one to reach for
 
-Plain Win32 + GDI — no SDL, no vcpkg, nothing to install but a compiler.
-Get MinGW-w64 (MSYS2: `pacman -S mingw-w64-x86_64-gcc`, then put
-`C:\msys64\mingw64\bin` on PATH), then:
-
-```bat
-git clone --depth 1 -b release/v8.3 https://github.com/lvgl/lvgl.git ..\lvgl_src
-sim\build.bat
-build\ev_cluster.exe
-```
-
-or from git bash:
+Opens no window, renders to memory, writes a PNG. This is what the design
+was checked against.
 
 ```bash
-LVGL_DIR=../lvgl_src bash sim/build.sh && ./build/ev_cluster.exe
+LVGL_DIR=../lvgl_src bash test/build_preview.sh
 ```
 
-A real 800 x 480 window opens with the cluster live in it. The ride-mode
-chips are clickable.
+Then:
+
+```bash
+python test/compare_to_figma.py
+```
+
+which prints every element's offset from the frame, samples the soft
+passages value by value, and writes `build/compare.png` and `build/diff.png`.
+
+LVGL is compiled once into `build/liblvgl-sim.a` and reused, so after the
+first run the edit-render-compare loop is a few seconds.
+
+Arguments are milliseconds to run and ride mode (`0` CRAWL, `1` STREET,
+`2` RUSH). To render what the panel will actually show:
+
+```bash
+CONF_DIR=mcux OUT=build565 LVGL_DIR=../lvgl_src bash test/build_preview.sh
+```
+
+`test/raw_to_png.py` detects RGB565 from the dump size.
+
+![RGB565](docs/preview-rgb565.png)
+
+A real 16-bit framebuffer dump. The pool banding is 16-bit colour on a
+smooth dark gradient and is inherent to the panel format.
+
+### On Windows
+
+Plain Win32 + GDI — nothing to install but a compiler. Get MinGW-w64
+(MSYS2: `pacman -S mingw-w64-x86_64-gcc`, then put `C:\msys64\mingw64\bin`
+on PATH), then:
+
+```bash
+git clone --depth 1 -b release/v8.3 https://github.com/lvgl/lvgl.git ../lvgl_src
+```
+
+```bash
+LVGL_DIR=../lvgl_src bash sim/build.sh && ./build/cluster.exe
+```
+
+or `sim\build.bat` from cmd. A real 800 × 480 window opens.
 
 | | |
 |---|---|
-| `1` `2` `3` | switch ride mode |
+| `1` `2` `3` | CRAWL / STREET / RUSH |
 | `Esc` | quit |
 | `--mode 2` | start in RUSH |
 | `--exit-after 6000` | quit after 6 s |
-| `--dump frame.bin` | write the final framebuffer (feed to `test/raw_to_png.py`) |
+| `--dump frame.bin` | write the final framebuffer |
 
-### On i.MX RT1170 hardware
+> The simulator compiles clean but was never executed here — this machine's
+> Application Control policy blocks running a freshly built GUI binary. The
+> headless preview, which is a console binary and exercises the same UI
+> code, runs fine and is what every figure in this README comes from.
 
-See **[mcux/README.md](mcux/README.md)** for the full guide. The short
-version: bring up a stock SDK LVGL example on the panel first, then swap
-three lines.
+### On i.MX RT1170
+
+See **[mcux/README.md](mcux/README.md)**. The short version:
 
 ```c
 #include "app_cluster.h"
@@ -115,156 +156,143 @@ app_cluster_init();   /* instead of lv_demo_widgets()  */
 app_cluster_poll();   /* instead of lv_timer_handler() */
 ```
 
-Use `mcux/lv_conf.h`, and set `DEMO_PANEL` to `DEMO_PANEL_RASPI_7INCH` — the
-SDK's 800 x 480 option. The UI is verified to render correctly in RGB565:
+---
 
-![RGB565](docs/preview-rgb565.png)
+## Live data
 
-That is a real 16-bit framebuffer dump, not the 32-bit one converted.
-
-Read the section on `LV_MEM_SIZE` before you trim it — the bloom needs a
-114 KB shadow mask in one allocation, and an undersized heap hangs LVGL
-rather than reporting an error.
-
-## Live data API
-
-All in `app/ev_data.h`. Integer only; no floating point in the render path.
+All in `app/cluster_data.h`. Integer only — no floating point in the update
+path, so it works unchanged on a part without an FPU.
 
 ```c
-ev_data_set_speed(47);                       /* km/h                        */
-ev_data_set_battery(86, 356);                /* SoC %, range km             */
-ev_data_set_power(2400);                     /* watts, negative = regen     */
-ev_data_set_temps(42, 31, 28);               /* motor, cell, ambient degC   */
-ev_data_set_distance(2360, 4812);            /* trip in 0.01 km, odo in km  */
-ev_data_set_nav(960, "To Santa Monica St.", EV_NAV_RIGHT);
-ev_data_set_mode(EV_MODE_RUSH);
-ev_data_set_turn(true, false);
-ev_data_set_charging(true);
-ev_data_set_beam(true);
-ev_data_set_clock(18, 42);
-ev_data_set_ride_time(2520);
+cluster_set_speed(56);                            /* km/h                  */
+cluster_set_mode(CL_MODE_STREET);
+cluster_set_odometer(8999999u);
+cluster_set_range(72);                            /* km                    */
+cluster_set_soc(89);                              /* percent               */
+cluster_set_nav("CARTER ROAD", 200, CL_TURN_LEFT);
+cluster_set_turn_signals(true, true);
+cluster_set_warning(true);
+cluster_set_beam(true);
+cluster_set_clock(17, 35);
+cluster_set_network("4G");
+cluster_set_bluetooth(true);
+cluster_set_auto_balance(false);
 ```
 
-Conditional styling lives in the setters, not the layout: the battery leaves
-the mode accent and warns amber below 20 % / red below 10 %, the power bar
-flips green under regen, motor temp turns amber at 90 °C, and the navigation
-arrow lights up inside 120 m of the manoeuvre.
+`cluster_data_init()` seeds every one of these with the value the frame
+shows, which is what makes a freshly built screen comparable against the
+design pixel for pixel. There is no demo loop to remove.
 
-`ev_data_set_nav()` switches from metres to `x.y km` above 1000 m, the way
-every nav app does. Pass 0 metres to clear guidance.
+Guidance and tell-tales hide rather than blank, so nothing reflows around
+them. `cluster_set_nav()` switches from metres to `x.y km` past a
+kilometre, and a NULL street clears the whole guidance group.
+
+The setters deliberately do **not** invent state colours — no amber battery
+below 20 %, no red below 10 %. The frame specifies one appearance and this
+reproduces it; conditional styling belongs wherever the thresholds are
+decided, hooked in through these same functions.
 
 ---
 
-## Design notes
+## Ride modes
 
-**No panels.** Everything floats on black. The only structure is two hairlines
-per column, which fade *away from the centre* so the eye stays on the dial.
-Units live in the caption (`RANGE · KM`) rather than beside the number, which
-keeps the numerals a clean right-aligned column.
+![CRAWL](docs/preview-crawl.png)
+![RUSH](docs/preview-rush.png)
 
-**The gradient ring.** LVGL 8 arcs are a single colour, so the fill is
-`EV_ARC_SEGMENTS` (6) abutting arcs sharing one geometry, each covering 45° of
-the 270° sweep with its own indicator colour. Rounded caps hide the joins. One
-animation callback drives the ring value, all six segments and the numeral, so
-they can never disagree.
-
-**The halo.** Three arcs of partial span at 26 s, 19 s and 34 s — deliberately
-incommensurate periods, so the picture never repeats — plus a short bright
-crest at 11 s. Rotation is `lv_arc_set_rotation()`, which is far cheaper than
-redrawing anything. The crest is held dimmer than the speed arc on purpose: it
-is atmosphere, and must never be misread as the value.
-
-**The bloom** is two circles with no fill whose shadow is the only thing drawn,
-one of them breathing its blur radius between 48 and 88 px.
-
-**Typography.** Outfit Thin at 92 px for the speed, ExtraLight 44 for the two
-hero values, Light 28 for secondary, Medium 11/13 with wide letter-spacing for
-captions. The big faces carry only the glyphs they need, which is why a 92 px
-font costs 13 KB.
+The selector is a rotary: the active mode sits in the pill with its
+neighbours above and below, wrapping at the ends. `cl_screen_set_mode()`
+rewrites the three labels; the pill itself never moves.
 
 ---
 
-## Animations
+## Three things LVGL cannot do directly
 
-| What | Where |
-|---|---|
-| Staggered fade + 12–14 px rise, chrome → light → columns → footer | `ev_dash_boot()` |
-| Halo spin-up: two fast decelerating turns landing back at 0° | `ev_dash_boot()` |
-| Endless halo drift at four incommensurate periods | `ev_dash_halo_drift()` |
-| Middle ring breathes its opacity; bloom breathes its blur, out of phase | `ev_dash_halo_drift()` |
-| Full-scale needle sweep 0 → 120 → 0 | `ev_dash_boot()` |
-| Speed eases into place over 220 ms | `ev_dash_anim_speed()` |
-| Turn-indicator blink | `blink_set()` in `ev_data.c` |
+The frame asks for three effects with no LVGL equivalent. Each is handled
+where it appears in the code, and each is worth knowing about before
+changing it.
 
-The demo holds still for the first 2.6 s (`EV_BOOT_HOLD_MS`) so the power-on
-sequence plays cleanly before live values start moving. A one-shot timer hands
-the halo from spin-up to drift at 2.45 s.
+**The backdrop gradient** (node 1:3) is radial, and LVGL 8 has only linear
+gradients. Stacked shadows were the obvious workaround and they do not
+work: LVGL's shadow is a box blur bounded by `shadow_width` that allocates
+`(shadow_width + radius)² × 2` bytes to draw, so a feather wide enough to
+cross the frame costs megabytes and every affordable version leaves its own
+rectangle showing as a hard step. A small alpha map drawn zoomed does not
+work either — `lv_draw_img.c` converts an `ALPHA_8BIT` source to
+`TRUE_COLOR_ALPHA` the moment a zoom is set, drops the decoded pointer, and
+the line-reading path it falls into cannot transform, so nothing draws at
+all.
+
+So Figma's gradient is *evaluated* rather than approximated. `generate.py`
+inverts the node's own `gradientTransform`, interpolates its two stops, and
+writes a quarter-scale alpha map that `cl_pool.c` expands once at start-up.
+That is 24 KB of flash, 384 KB of RAM, no per-frame cost, and within three
+counts per channel of the frame. If RAM is the tighter budget, have
+`generate.py` emit the map at full scale and point `cl_pool` straight at it
+— 384 KB of flash instead.
+
+**The two inset shadows** — the mode pill's blue inner glow (node 1:32) and
+the shade across the top of the range panel (node 1:45) — cast inwards, and
+LVGL's shadows only cast out. Both are baked to alpha maps and recoloured at
+draw time. Their parameters are *not* the ones the node exports: Figma's
+inner shadow is not the CSS formula its export writes down, so both were
+fitted by least squares against the rendered frame. The panel's fitted
+amplitude came out at exactly the 0.50 the node states, which is a good sign
+the fit is finding the real thing.
+
+**The stadium outline** (node 1:3's top stroke) runs all the way round both
+end caps. `LV_BORDER_SIDE_TOP` cannot draw that — it pushes the inner
+rectangle outwards on the three unset sides, which leaves the curved part
+outside the border band and squares the shape off. Two arcs and a hairline
+give the real geometry.
 
 ---
 
-## Headless preview (screenshots, CI)
-
-Separate from the Windows app: this one opens no window at all, renders to
-memory for a fixed number of milliseconds and writes a PNG. Useful for
-grabbing a frame at an exact moment, or for checking the UI in CI.
-
-```bash
-LVGL_DIR=../lvgl_src bash test/build_preview.sh 6000 0
-```
-
-Arguments are milliseconds to run and ride mode (`0` STREET, `1` CRAWL,
-`2` RUSH). Output lands in `build/preview.png`. Pass `700` to catch the boot
-sequence mid-flight.
-
-To render exactly what the hardware will show, point it at the RT1170 config
-— `test/raw_to_png.py` detects RGB565 from the dump size:
-
-```bash
-CONF_DIR=mcux OUT=build565 LVGL_DIR=../lvgl_src bash test/build_preview.sh 6000 0
-```
-
-## Regenerating the fonts
+## Regenerating the assets
 
 ```bash
 bash fonts/generate.sh
 ```
 
-Fetches the Outfit weights and re-runs `lv_font_conv` (via `npx`, so nothing
-is installed globally). Change the family or sizes at the top of that script;
-keep the FontAwesome code point list in step with `ui/ui_fonts.h`.
+Fetches Bai Jamjuree and Jura from Google Fonts and re-runs `lv_font_conv`
+via `npx`, so nothing is installed globally. Faces are subsetted to what
+they actually render — captions carry only their own letters, anything
+showing live data carries printable ASCII.
+
+```bash
+python icons/generate.py
+```
+
+Rasterises `icons/svg/` and recomputes the three baked maps. No
+dependencies beyond the standard library: it parses the SVG paths, flattens
+the curves and scanline-fills them at 4× supersampling with the nonzero
+winding rule. Re-export a node from Figma, drop the file in `icons/svg/`,
+re-run it.
+
+If you regenerate a font at a different size, re-measure its leading —
+`cl_fonts.c` carries the gap between where Figma puts a text node and where
+LVGL puts a label, and `compare_to_figma.py` reports it.
 
 ---
 
 ## Tuning
 
-**Colours and geometry** are all in `ui/ui_theme.h`. The per-mode ring
-gradients are `EV_STREET_FROM`/`_TO`, `EV_CRAWL_*`, `EV_RUSH_*`; the midpoint
-of the active pair becomes the accent for the halo, bloom, battery, chip and
-link icon.
+**Colour and geometry** are all in `ui/cl_theme.h`, every constant tagged
+with the node it came from. Coordinates are the node's own x/y; the two
+places where Figma's numbers and its render disagree are called out in
+comments, both caused by centre-aligned strokes.
 
-**Redraw cost.** The heavy items are the seven overlapping ~300 px arcs and
-the two shadow blooms. If frame rate is tight:
+**Memory.** `LV_MEM_SIZE` is 96 KB. The largest single allocation is the
+glow dots' shadow at about 20 KB — `(shadow_width + radius)² × 2`. Undersize
+it and LVGL hangs rather than reporting an error, so change it with the
+headless preview in hand. The 384 KB backdrop buffer is a static array and
+does not come out of `LV_MEM_SIZE`.
 
-- drop `EV_ARC_SEGMENTS` to 1 for a flat single-colour ring (−5 arcs)
-- drop the halo to one ring, or raise the drift periods
-- set `shadow_width` to 0 on `glow_out` / `glow_in`
+**Redraw cost.** Nothing here is expensive: the backdrop is an untransformed
+alpha blit, the two rings and the AUTO BALANCE curve are thin strokes, and
+the only shadows left are the two glow dots and the warning halo. Setting
+`shadow_width` to 0 on those three is the one lever, and it is style-only.
 
-All are style-only changes; no layout moves.
-
-**Another resolution.** Positions are absolute. `EV_W/EV_H`, `EV_MARGIN`,
-`EV_COL_W`, `EV_DIAL_CX/CY` and `EV_ARC_SIZE` are the values to start from.
-For a short panel like 480 × 272, move the two columns under the dial rather
-than scaling — the type is already at its comfortable minimum.
-
----
-
-## A note on GUI Guider
-
-The first version of this screen was built to be mirrored in GUI Guider. This
-one is not, by request: the rotating halo, the multi-segment gradient ring, the
-custom typefaces and the shadow blooms are all things the editor cannot
-author. The code is plain LVGL 8.3 with no dependencies beyond `lvgl.h`, so it
-drops into an MCUXpresso project alongside GUI Guider output — it just is not
-editable *from* the editor. If you need a screen the design team can move
-widgets around in, keep that one for the editable screens and treat this as
-hand-built.
+**Another resolution.** Positions are absolute. `CL_W`/`CL_H` and the
+geometry block in `cl_theme.h` are where to start — and `generate.py` needs
+its `POOL_*` constants moved with them, since the gradient is baked against
+the 800 × 480 frame.

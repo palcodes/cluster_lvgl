@@ -5,3 +5,4 @@ fonts/.ttf/
 *.exe
 *.o
 *.rsp
+__pycache__/

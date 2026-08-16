@@ -6,17 +6,18 @@
 
 #include "lvgl.h"
 #include "app_cluster.h"
-#include "ui_dash.h"
-#include "ev_data.h"
+#include "cl_screen.h"
+#include "cluster_data.h"
 
 void app_cluster_init(void)
 {
-    /* Builds every widget, loads the screen, and starts the power-on
-     * reveal.  ev_data_init() then seeds the values and kicks off the demo
-     * ride - delete the ev_data_demo_start() call inside it once your CAN
-     * or BMS task is feeding the ev_data_set_*() functions instead. */
-    ev_dash_create(&ev_ui);
-    ev_data_init(&ev_ui);
+    /* cl_screen_create() builds every widget and loads the screen;
+     * cluster_data_init() then writes the frame's own values into it, so the
+     * panel comes up showing the design.  Once a CAN or BMS task is calling
+     * the cluster_set_*() functions it will overwrite them - there is no
+     * demo loop to remove. */
+    cl_screen_create(&cl_ui);
+    cluster_data_init(&cl_ui);
 }
 
 uint32_t app_cluster_poll(void)

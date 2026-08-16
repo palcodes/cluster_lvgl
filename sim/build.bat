@@ -30,10 +30,12 @@ if exist "%RSP%" del /q "%RSP%"
 REM Collect every source into a response file - the command line would
 REM otherwise blow past the 8191 character limit.
 for /r "%LVGL_DIR%\src" %%f in (*.c) do echo "%%f">>"%RSP%"
-for %%f in ("%ROOT%\fonts\ev_font_*.c") do echo "%ROOT%\fonts\%%~nxf">>"%RSP%"
-echo "%ROOT%\ui\ui_dash.c">>"%RSP%"
-echo "%ROOT%\ui\ui_events.c">>"%RSP%"
-echo "%ROOT%\app\ev_data.c">>"%RSP%"
+for %%f in ("%ROOT%\fonts\cl_font_*.c") do echo "%ROOT%\fonts\%%~nxf">>"%RSP%"
+for %%f in ("%ROOT%\icons\cl_*.c") do echo "%ROOT%\icons\%%~nxf">>"%RSP%"
+echo "%ROOT%\ui\cl_screen.c">>"%RSP%"
+echo "%ROOT%\ui\cl_fonts.c">>"%RSP%"
+echo "%ROOT%\ui\cl_pool.c">>"%RSP%"
+echo "%ROOT%\app\cluster_data.c">>"%RSP%"
 echo "%ROOT%\sim\main_win32.c">>"%RSP%"
 
 echo Building...
@@ -41,7 +43,7 @@ gcc -O2 -DLV_CONF_INCLUDE_SIMPLE ^
     -I"%ROOT%\sim" -I"%LVGL_DIR%" -I"%ROOT%\ui" -I"%ROOT%\app" ^
     @"%RSP%" ^
     -lgdi32 -luser32 -mwindows ^
-    -o "%ROOT%\build\ev_cluster.exe"
+    -o "%ROOT%\build\cluster.exe"
 
 if errorlevel 1 (
     echo Build failed.
@@ -49,6 +51,6 @@ if errorlevel 1 (
 )
 
 echo.
-echo   %ROOT%\build\ev_cluster.exe
+echo   %ROOT%\build\cluster.exe
 echo.
 endlocal
