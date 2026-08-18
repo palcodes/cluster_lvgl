@@ -4,8 +4,8 @@
  * Windows simulator for the cluster.  Plain Win32 + GDI - no SDL, no
  * external libraries, nothing to install beyond a C compiler.
  *
- * With LV_COLOR_DEPTH 32 an lv_color_t is BGRA in memory, which is exactly
- * the layout of a 32-bit top-down DIB section, so flushing is a row memcpy.
+ * With LV_COLOR_DEPTH 32 LVGL renders XRGB8888, which is byte-for-byte the
+ * layout of a 32-bit top-down DIB section, so flushing is a row memcpy.
  *
  *   cluster.exe                       run it
  *   cluster.exe --mode 2              start in RUSH
@@ -25,8 +25,8 @@
 #include "cl_screen.h"
 #include "cluster_data.h"
 
-#define SIM_W           CL_W
-#define SIM_H           CL_H
+#define SIM_W           CL_PANEL_W
+#define SIM_H           CL_PANEL_H
 #define SIM_TITLE       "Cluster - Dashboard v2"
 #define DRAW_BUF_LINES  120
 
@@ -39,7 +39,7 @@ static bool     g_running = true;
 /**********************
  *   LVGL PLUMBING
  **********************/
-static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *px)
+static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
 {
     int32_t y;
     int32_t w = area->x2 - area->x1 + 1;
@@ -47,7 +47,7 @@ static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *px)
     for (y = area->y1; y <= area->y2; y++) {
         memcpy(g_pixels + ((size_t)y * SIM_W + (size_t)area->x1) * 4,
                px, (size_t)w * 4);
-        px += w;
+        px += (size_t)w * 4;
     }
 
     {   /* Push just the dirty rectangle to the window. */
@@ -57,7 +57,7 @@ static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *px)
         ReleaseDC(g_hwnd, dc);
     }
 
-    lv_disp_flush_ready(drv);
+    lv_display_flush_ready(disp);
 }
 
 /**********************
@@ -142,10 +142,9 @@ static bool create_window(void)
  **********************/
 int main(int argc, char **argv)
 {
-    static lv_disp_draw_buf_t draw_buf;
-    static lv_color_t buf1[SIM_W * DRAW_BUF_LINES];
-    static lv_color_t buf2[SIM_W * DRAW_BUF_LINES];
-    static lv_disp_drv_t disp_drv;
+    static uint8_t buf1[SIM_W * DRAW_BUF_LINES * 4];
+    static uint8_t buf2[SIM_W * DRAW_BUF_LINES * 4];
+    lv_display_t *disp;
 
     int         mode       = -1;
     int         exit_after = 0;             /* ms; 0 = run until closed */
@@ -170,13 +169,10 @@ int main(int argc, char **argv)
 
     lv_init();
 
-    lv_disp_draw_buf_init(&draw_buf, buf1, buf2, SIM_W * DRAW_BUF_LINES);
-    lv_disp_drv_init(&disp_drv);
-    disp_drv.draw_buf = &draw_buf;
-    disp_drv.flush_cb = flush_cb;
-    disp_drv.hor_res  = SIM_W;
-    disp_drv.ver_res  = SIM_H;
-    lv_disp_drv_register(&disp_drv);
+    disp = lv_display_create(SIM_W, SIM_H);
+    lv_display_set_flush_cb(disp, flush_cb);
+    lv_display_set_buffers(disp, buf1, buf2, sizeof(buf1),
+                           LV_DISPLAY_RENDER_MODE_PARTIAL);
 
     cl_screen_create(&cl_ui);
     cluster_data_init(&cl_ui);

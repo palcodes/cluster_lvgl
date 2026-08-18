@@ -1,205 +1,171 @@
 # Running on i.MX RT1170 (MCUXpresso)
 
-Target: **MIMXRT1170-EVKB**, 800 × 480, RGB565, double-buffered.
+Target: **MIMXRT1176-EVKB**, **ST7701 panel, 480 x 854 over MIPI DSI**, RGB565,
+double-buffered, rotated to landscape. **LVGL 9.4**, the version the SDK
+project ships.
+
+The integration into `../gui` is done. This document says what was changed
+there, what to check on the bench, and what is still unverified.
 
 ## Read this first
 
-I could verify some of this and not all of it, so here is the split:
-
 **Verified here**
-- The whole UI compiles clean against `mcux/lv_conf.h` (`LV_COLOR_DEPTH 16`)
-  and renders correctly in RGB565 — see `docs/preview-rgb565.png`, which is
-  a real 16-bit framebuffer dump, not the 32-bit one converted.
-- No Montserrat dependency: every face is ours, `LV_FONT_DEFAULT` points at
-  `cl_font_semi_14`.
-- Panel numbers below are read out of NXP's own `display_support.c/.h` for
-  this board, not from memory.
+
+- The whole UI compiles clean against LVGL 9.4 and renders correctly - the
+  previews in `docs/` are real frames from this code, and
+  `test/compare_to_figma.py` puts every element within a pixel of the Figma
+  frame (3.29 % of pixels differ by more than 8/255, essentially all of it
+  glyph antialiasing).
+- It also compiles clean against the **MCUXpresso project's own LVGL
+  configuration** - the Kconfig-generated one, VG-Lite and PXP enabled,
+  `LV_COLOR_DEPTH 16` - not just against `sim/lv_conf.h`. From the `gui`
+  directory:
+
+  ```bash
+  gcc -fsyntax-only -DLV_CONF_INCLUDE_SIMPLE=1 -DCL_PANEL_W=854 -DCL_PANEL_H=480 -imacros source/mcux_config.h -I source -I lvgl -I lvgl/src -I source/ui -I source/app -I source/mcux -I vglite/inc source/ui/*.c source/app/*.c source/mcux/app_cluster.c source/fonts/cl_font_*.c source/icons/cl_*.c
+  ```
+
+- No Montserrat dependency in the cluster itself: every face is ours and each
+  label sets its own. The SDK config still has Montserrat 14 as
+  `LV_FONT_DEFAULT`, which costs flash and nothing else.
 
 **Not verified**
-- I do not have the RT1170 SDK or the board, so nothing here has been
-  compiled with `arm-none-eabi-gcc` or run on silicon. The board bring-up is
-  the SDK's, unchanged — that is deliberate, and it is why this document
-  tells you which example to start from instead of shipping you display
-  driver code I cannot test.
 
-## One thing to confirm before you order a panel
+- No `arm-none-eabi-gcc` on this machine, so nothing here has been built with
+  the ARM toolchain or run on silicon. The board bring-up is the SDK's,
+  unchanged, apart from the edits listed below.
 
-On the RT1170 EVKB the display output that is actually wired up is **MIPI
-DSI** (the FPC connector), and the SDK's 800 × 480 option is a **Raspberry
-Pi 7" DSI panel**:
+## The panel
 
-```c
-#define DEMO_PANEL_RASPI_7INCH 3  /* 800 * 480, Raspberry Pi 7" */
-```
+The display is 480 x 854 **portrait**; the cluster is an 800 x 480
+**landscape** design. Two things bridge that:
 
-So there are three routes:
+**Rotation.** `DEMO_USE_ROTATE` makes `lvgl_support.c` hand LVGL a canvas of
+the panel on its side - 854 x 480 - and rotate each rendered frame into the
+portrait frame buffer through the PXP. That path was already in the SDK port;
+it was just switched off.
 
-1. **RPi 7" DSI panel** — 800 × 480, supported by the SDK today, zero driver
-   work. Best way to get the cluster on glass this week.
-2. **Parallel RGB panel** — the RT1170 can drive parallel RGB through eLCDIF
-   (`DEMO_DISPLAY_CONTROLLER_ELCDIF`), but you need a carrier that routes
-   those pins; the EVKB does not bring them to a display connector. The right
-   answer for production, more work for a bench bring-up.
-3. **MIPI-to-RGB bridge** on your own carrier.
+**The extra 54 px.** 854 is 54 wider than the design. `cl_screen_create()`
+puts the whole 800 x 480 frame in a container inset by `CL_ORIGIN_X`, so the
+design is centred with 27 px of black either side and every Figma coordinate
+stays exactly where it was. `CL_PANEL_W` / `CL_PANEL_H` come from the
+project's defined symbols; undefined, the screen is the design frame, which
+is why the desktop preview still renders 800 x 480 for comparison against
+Figma.
 
-The UI does not care which you pick — it only needs an 800 × 480 framebuffer.
+To re-lay-out for the full 854 instead, `CL_W` and the geometry block in
+`ui/cl_theme.h` are where to start - and `icons/generate.py` needs its
+`POOL_*` constants moved with them, since the backdrop gradient is baked
+against the 800 x 480 frame.
 
-## Panel numbers (from the SDK, for the 800 × 480 option)
+## What was changed in `gui`
 
-| | |
+| File | Change |
 |---|---|
-| Driver | `fsl_rpi.h` over MIPI DSI |
-| Pixel clock | ~28 MHz (PLL_528, `div = 19`) |
-| HSW / HFP / HBP | 20 / 70 / 23 |
-| VSW / VFP / VBP | 2 / 7 / 21 |
-| Format | `kVIDEO_PixelFormatRGB565`, 2 bytes/px |
-| Buffers | 2 |
+| `source/{ui,app,fonts,icons}/`, `source/mcux/app_cluster.[ch]` | the ported UI, copied in |
+| `source/mcux/lv_conf.h` | **deleted** - see below |
+| `.cproject` | include paths repointed at `source/ui`, `source/app`, `source/mcux`, `source/fonts`, `source/icons` - they pointed at the project root, where those folders do not exist; `CL_PANEL_W=854` and `CL_PANEL_H=480` added to the defined symbols of both configurations |
+| `source/mcux_config.h` | `DEMO_USE_ROTATE 1` |
+| `source/lvgl_support.c` | `DEMO_LVGL_BUF_SIZE` added and used to size the rotate buffer - see below |
+| `source/lvgl_demo_benchmark.c` | `lv_demo_benchmark()` -> `app_cluster_init()` |
+| `source/mcux/app_cluster.c` | idle return of `lv_timer_handler()` capped |
 
-If you go the parallel-RGB route, these are the values to replace with your
-panel's datasheet timings — the structure of `display_support.c` stays the
-same, you add a panel case.
+### Why `mcux/lv_conf.h` is not shipped into the project
 
-## Steps
+The MCUXpresso build gets its LVGL configuration from Kconfig:
+`source/mcux_config.h` (force-included with `-imacros`) carries the
+`CONFIG_LV_*` values, and `source/lv_conf.h` only derives `LV_COLOR_DEPTH`
+from the frame buffer format. The project also builds with
+`LV_CONF_INCLUDE_SIMPLE`, so **a second `lv_conf.h` anywhere on the include
+path can shadow the generated one**. `source/mcux` is on the include path for
+`app_cluster.h`, so the copy that used to sit there was removed.
 
-**1. Get an SDK example that already boots LVGL.**
+The one in this repo is for the RGB565 *preview* only. If a setting has to
+change on the target, change it in `source/mcux_config.h`.
 
-In the MCUXpresso SDK Builder select **MIMXRT1170-EVKB** and tick the
-**LVGL** middleware, download, then import
-`boards/evkbmimxrt1170/lvgl_examples/lvgl_demo_widgets_bm` (bare metal) or
-`..._freertos`. Build and flash it *unmodified* first. Do not go further
-until the stock demo is on the panel — that separates board problems from
-UI problems.
+### The rotated buffer was undersized
 
-> The `lvgl_examples` folder only exists in the SDK download, not in NXP's
-> public GitHub mirror. If you cannot find it,
-> `display_examples/fbdev_freertos` gets the panel up and you add LVGL on top.
+`DEMO_FB_SIZE` is `stride(480) x 854 = 819,840` bytes. Rotated, LVGL renders
+854 px wide, and `854 x 2 = 1708` rounds up to a 1728-byte stride - so it
+writes `1728 x 480 = 829,440` bytes into a buffer declared 9,600 bytes
+smaller. `DEMO_LVGL_BUF_SIZE` sizes that buffer from the rotated geometry
+instead. Worth knowing if the panel size ever changes: the two orientations
+do not have the same stride.
 
-**2. Point it at the 800 × 480 panel.**
+### Why the poll return is capped
 
-In `display_support.h`, or as a preprocessor define in project settings:
-
-```c
-#define DEMO_PANEL DEMO_PANEL_RASPI_7INCH
-```
-
-Re-flash the stock demo and confirm it fills 800 × 480 correctly.
-
-**3. Add the cluster sources.**
-
-Copy `ui/`, `app/`, `fonts/`, `icons/` and `mcux/app_cluster.[ch]` into the
-project, then add `ui`, `app` and `mcux` to the include paths and
-`ui/*.c`, `app/*.c`, `fonts/cl_font_*.c`, `icons/cl_*.c` and
-`mcux/app_cluster.c` to the sources.
-
-For the armgcc CMake build, add to `CMakeLists.txt`:
-
-```cmake
-target_sources(${MCUX_SDK_PROJECT_NAME} PRIVATE
-    ${ProjDirPath}/../ui/cl_screen.c
-    ${ProjDirPath}/../ui/cl_fonts.c
-    ${ProjDirPath}/../ui/cl_pool.c
-    ${ProjDirPath}/../app/cluster_data.c
-    ${ProjDirPath}/../mcux/app_cluster.c
-)
-file(GLOB CL_FONTS ${ProjDirPath}/../fonts/cl_font_*.c)
-file(GLOB CL_IMAGES ${ProjDirPath}/../icons/cl_*.c)
-target_sources(${MCUX_SDK_PROJECT_NAME} PRIVATE ${CL_FONTS} ${CL_IMAGES})
-target_include_directories(${MCUX_SDK_PROJECT_NAME} PRIVATE
-    ${ProjDirPath}/../ui ${ProjDirPath}/../app ${ProjDirPath}/../mcux)
-```
-
-**4. Replace `lv_conf.h`.**
-
-Use `mcux/lv_conf.h`. It is the stock LVGL 8.3 template with these changes:
-
-| Setting | Value | Why |
-|---|---|---|
-| `LV_COLOR_DEPTH` | 16 | matches the RGB565 framebuffer |
-| `LV_MEM_SIZE` | 96 KB | see below before lowering it |
-| `LV_DISP_DEF_REFR_PERIOD` | 30 ms | nothing moves on its own yet |
-| `LV_MEMCPY_MEMSET_STD` | 1 | newlib's are faster than LVGL's fallbacks |
-| `LV_FONT_MONTSERRAT_*` | 0 | not used; saves the flash |
-| `LV_FONT_CUSTOM_DECLARE` | `LV_FONT_DECLARE(cl_font_semi_14)` | |
-| `LV_FONT_DEFAULT` | `&cl_font_semi_14` | |
-| `LV_DRAW_COMPLEX` | 1 | **required** — shadows and arc antialiasing |
-
-Keep whatever the SDK example set for `LV_TICK_CUSTOM` and any PXP/VGLite
-options; those are board-side decisions and they were already correct.
-
-### Why `LV_MEM_SIZE` is 96 KB, and how it fails if it is not
-
-LVGL 8.3 draws a box shadow by allocating a mask of
-`(radius + shadow_width)²` **uint16** from the LVGL heap. The largest one
-left in this screen is a glow dot — `(11 + 90)² × 2 ≈ 20 KB` in a single
-allocation — so 96 KB has comfortable headroom.
-
-It is worth knowing how this fails, because it is nasty to debug on
-hardware. If the allocation cannot be met, `LV_USE_ASSERT_MALLOC` is on and
-LVGL's default assert handler is `while(1)` — so the board does not log an
-error or draw a broken frame, it simply **hangs during the first paint**,
-looking exactly like a display driver problem. Shadow blur costs heap
-*quadratically*, so if you raise `shadow_width` anywhere, recompute.
-
-### The 384 KB backdrop buffer
-
-`ui/cl_pool.c` holds a static `800 × 480` byte array — the expanded backdrop
-gradient. It is `.bss`, not LVGL heap, and it must land somewhere with room:
-put it in SDRAM alongside the framebuffers if your linker script does not
-already send large `.bss` there.
-
-If that is the wrong trade for your board, the alternative is to have
-`icons/generate.py` emit the map at full scale (`POOL_SCALE = 1`) and point
-`cl_pool` straight at the generated descriptor — that moves the same 384 KB
-from RAM into flash and removes `cl_pool_build()` entirely.
-
-**5. Swap the demo for the cluster.**
-
-In the example's `main()`:
-
-```c
-- lv_demo_widgets();
-+ app_cluster_init();
-```
-
-and in the service loop:
-
-```c
-- lv_timer_handler();
-+ app_cluster_poll();
-```
-
-If the example does not already have a 1 kHz LVGL tick (i.e.
-`LV_TICK_CUSTOM` is 0), call `app_cluster_tick_1ms()` from
-`SysTick_Handler()`.
-
-That is the whole integration — three lines.
+LVGL 9's `lv_timer_handler()` returns `LV_NO_TIMER_READY` (0xFFFFFFFF) when
+nothing is due, which this screen reaches as soon as it settles - nothing
+here animates. The service loop does `vTaskDelay(app_cluster_poll())`, which
+would then park the task for 49 days and the panel would never pick up the
+next `cluster_set_*()`. `app_cluster_poll()` caps it at 30 ms.
 
 ## Memory
 
 | | |
 |---|---|
-| Framebuffers | 800 × 480 × 2 B × 2 = **1.5 MB** → SDRAM (EVKB has 64 MB) |
-| Backdrop buffer | **384 KB** `.bss` → SDRAM |
-| LVGL heap | 96 KB (`LV_MEM_SIZE`) |
-| Type | **79 KB** flash, all ten faces, measured from compiled objects |
-| Images | **52 KB** flash — icons, two baked shadows, the gradient |
-| UI + data code | ~15 KB flash |
+| Frame buffers | 2 x 480 x 854 x 2 B = **1.56 MB** -> `NCACHE_REGION` (16 MB) |
+| LVGL rotate buffer | 1728 x 480 = **810 KB** -> `NCACHE_REGION` |
+| Backdrop buffer | **384 KB** `.bss` -> `BOARD_SDRAM` (48 MB, the default data region) |
+| LVGL heap | 384 KB (`CONFIG_LV_MEM_SIZE_KILOBYTES`); the screen's largest single allocation is a glow dot's shadow at about 20 KB |
+| Type | **79 KB** flash, all ten faces |
+| Images | **52 KB** flash - icons, two baked shadows, the gradient |
 
-The SDK's `lv_port_disp.c` already puts the framebuffers in SDRAM and does
-the D-cache clean before handing a buffer to the display controller. Do not
-re-implement that — if you see tearing or stale rows, it is a cache
-maintenance bug, and the SDK version is the known-good reference.
+Nothing here is tight, and no linker changes were needed.
+
+## On the bench, in this order
+
+**1. Flash it.** The stock demo is gone - `AppTask()` now calls
+`app_cluster_init()` and services `app_cluster_poll()`. If the panel comes up
+black, the display half is unchanged from the example that worked, so suspect
+the UI half.
+
+**2. Check which way up it is.** `DEMO_FlushDisplay()` in
+`source/lvgl_support.c` rotates with `LV_DISPLAY_ROTATION_90`. If the cluster
+is upside down, that is `LV_DISPLAY_ROTATION_270` - the one thing here that
+cannot be worked out without seeing the panel. Both branches, PXP and the
+software fallback, carry the constant; change both.
+
+**3. Check the icons and the backdrop.** `CONFIG_LV_USE_DRAW_VG_LITE 1` puts
+the GPU in the draw path. The icons are A8 alpha maps recoloured at draw
+time, and the backdrop is one full-screen A8 blit; LVGL falls back to
+software for anything the VG-Lite unit declines, so this *should* be
+invisible. If tell-tales come out the wrong colour or the gradient is wrong,
+set `CONFIG_LV_USE_DRAW_VG_LITE 0` in `source/mcux_config.h` to confirm it is
+the GPU path before chasing anything else.
+
+**4. Touch.** The GT911 is initialised for the MIPI panel and failure is not
+fatal - `DEMO_InitTouch()` prints and returns false, and no input device is
+registered. The cluster has nothing clickable, so it does not care either
+way.
+
+## Live data
+
+`app/cluster_data.h`. Integer only, no floating point in the update path.
+
+```c
+cluster_set_speed(56);
+cluster_set_mode(CL_MODE_STREET);
+cluster_set_soc(89);
+cluster_set_nav("CARTER ROAD", 200, CL_TURN_LEFT);
+```
+
+`cluster_data_init()` seeds every value with what the frame shows, which is
+what makes a freshly flashed board comparable against the design. There is no
+demo loop to remove. Call the setters from whatever task owns CAN or the BMS;
+they touch LVGL objects directly, so keep them on the LVGL task or add the
+usual lock if they have to run on another one.
 
 ## If the frame rate disappoints
 
-Turn on `LV_USE_PERF_MONITOR 1` first and get a number before changing
-anything. This screen is much cheaper to draw than it looks — the backdrop
-is an untransformed alpha blit and there is no animation — so the order is:
+Turn on `CONFIG_LV_USE_PERF_MONITOR` and get a number before changing
+anything. This screen is cheap to draw - the backdrop is an untransformed
+alpha blit and there is no animation - so the order is:
 
 1. **The two glow dots and the warning halo**, the only real shadows left.
    `shadow_width` to 0 on those three in `ui/cl_screen.c` is style-only.
-2. **The two 290 px rings and the AUTO BALANCE curve**, thin strokes with
-   antialiasing. Cheap, but they cover a lot of area.
-3. **The backdrop**, if the panel is redrawing in full every frame. It is a
-   single 800 × 480 8-bit blend; if that is the bottleneck the answer is
-   partial refresh, not a smaller gradient.
+2. **The two 290 px rings and the AUTO BALANCE curve**, thin antialiased
+   strokes. Cheap, but they cover a lot of area.
+3. **The rotation itself.** Every frame is rotated by the PXP into the frame
+   buffer. If that dominates, the answer is a panel scanned in landscape, not
+   a cheaper UI.

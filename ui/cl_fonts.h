@@ -50,7 +50,7 @@ LV_FONT_DECLARE(cl_font_semi_14)    /* Jura SemiBold - clock, state of charge */
  */
 typedef struct {
     const lv_font_t *font;
-    lv_coord_t       lead;
+    int32_t       lead;
 } cl_face_t;
 
 extern const cl_face_t CL_SPEED_136;

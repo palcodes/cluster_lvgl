@@ -11,10 +11,10 @@
  *   feather wide enough to cross the frame is unaffordable and every
  *   affordable version leaves its rectangle showing as a hard step.
  *
- *   A small alpha map drawn zoomed.  LVGL 8.3 refuses: lv_draw_img.c turns
- *   an LV_IMG_CF_ALPHA_8BIT source into TRUE_COLOR_ALPHA the moment a zoom
- *   or an angle is set, drops the decoded pointer, and the line-reading
- *   fallback it lands in cannot transform - so nothing is drawn at all.
+ *   A small alpha map drawn zoomed.  LVGL 8.3 refused outright; LVGL 9 will
+ *   scale an A8 source, but a 4x transform of a full-screen image every
+ *   refresh is a lot of work to save 384 KB, and it resamples the gradient
+ *   differently from the frame.
  *
  *   A full-size alpha map in flash.  Correct and free at runtime, but 384 KB
  *   of generated C for one background.
@@ -22,7 +22,7 @@
  * So the map ships at a quarter scale - 24 KB, evaluated from the node's own
  * gradient by icons/generate.py - and is expanded here into a full-size
  * buffer once, at start-up.  After that it is an ordinary un-zoomed
- * ALPHA_8BIT image taking LVGL's fast path: no per-frame transform, no
+ * A8 image taking LVGL's fast path: no per-frame transform, no
  * shadow buffer, and the colour still comes from img_recolor.
  *
  * The cost is CL_W * CL_H bytes of RAM.  If that is the wrong trade for a
@@ -34,14 +34,16 @@
 
 static uint8_t pool_buf[CL_W * CL_H];
 
-lv_img_dsc_t cl_pool = {
-    .header.cf          = LV_IMG_CF_ALPHA_8BIT,
-    .header.always_zero = 0,
-    .header.reserved    = 0,
-    .header.w           = CL_W,
-    .header.h           = CL_H,
-    .data_size          = CL_W * CL_H,
-    .data               = pool_buf,
+lv_image_dsc_t cl_pool = {
+    .header.magic      = LV_IMAGE_HEADER_MAGIC,
+    .header.cf         = LV_COLOR_FORMAT_A8,
+    .header.flags      = 0,
+    .header.w          = CL_W,
+    .header.h          = CL_H,
+    .header.stride     = CL_W,
+    .header.reserved_2 = 0,
+    .data_size         = CL_W * CL_H,
+    .data              = pool_buf,
 };
 
 void cl_pool_build(void)

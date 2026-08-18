@@ -31,20 +31,20 @@ cl_screen_t cl_ui;
  *  from a cleared style and opts back in.
  *-------------------------------------------------------------------------*/
 
-static lv_obj_t *bare(lv_obj_t *par, lv_coord_t x, lv_coord_t y,
-                      lv_coord_t w, lv_coord_t h)
+static lv_obj_t *bare(lv_obj_t *par, int32_t x, int32_t y,
+                      int32_t w, int32_t h)
 {
     lv_obj_t *o = lv_obj_create(par);
     lv_obj_remove_style_all(o);
-    lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_pos(o, x, y);
     lv_obj_set_size(o, w, h);
     return o;
 }
 
 /* A block of colour: the hairlines and the range panel are both this. */
-static lv_obj_t *fill(lv_obj_t *par, lv_coord_t x, lv_coord_t y,
-                      lv_coord_t w, lv_coord_t h, lv_color_t c, lv_opa_t opa)
+static lv_obj_t *fill(lv_obj_t *par, int32_t x, int32_t y,
+                      int32_t w, int32_t h, lv_color_t c, lv_opa_t opa)
 {
     lv_obj_t *o = bare(par, x, y, w, h);
     lv_obj_set_style_bg_color(o, c, 0);
@@ -54,7 +54,7 @@ static lv_obj_t *fill(lv_obj_t *par, lv_coord_t x, lv_coord_t y,
 
 /* Text placed by the top-left of its line box, the way Figma reports it. */
 static lv_obj_t *text(lv_obj_t *par, const cl_face_t *face, lv_color_t c,
-                      lv_opa_t opa, lv_coord_t x, lv_coord_t y, const char *s)
+                      lv_opa_t opa, int32_t x, int32_t y, const char *s)
 {
     lv_obj_t *l = lv_label_create(par);
     lv_obj_remove_style_all(l);
@@ -71,8 +71,8 @@ static lv_obj_t *text(lv_obj_t *par, const cl_face_t *face, lv_color_t c,
  * longest value, centred on the design's centre line, so the label never
  * has to be re-measured when the value updates. */
 static lv_obj_t *text_centred(lv_obj_t *par, const cl_face_t *face,
-                              lv_color_t c, lv_opa_t opa, lv_coord_t cx,
-                              lv_coord_t y, lv_coord_t w, const char *s)
+                              lv_color_t c, lv_opa_t opa, int32_t cx,
+                              int32_t y, int32_t w, const char *s)
 {
     lv_obj_t *l = text(par, face, c, opa, cx - w / 2, y, s);
     lv_obj_set_width(l, w);
@@ -82,8 +82,8 @@ static lv_obj_t *text_centred(lv_obj_t *par, const cl_face_t *face,
 
 /* Text pinned by its right edge - only the clock needs it. */
 static lv_obj_t *text_right(lv_obj_t *par, const cl_face_t *face, lv_color_t c,
-                            lv_opa_t opa, lv_coord_t right, lv_coord_t y,
-                            lv_coord_t w, const char *s)
+                            lv_opa_t opa, int32_t right, int32_t y,
+                            int32_t w, const char *s)
 {
     lv_obj_t *l = text(par, face, c, opa, right - w, y, s);
     lv_obj_set_width(l, w);
@@ -93,27 +93,27 @@ static lv_obj_t *text_right(lv_obj_t *par, const cl_face_t *face, lv_color_t c,
 
 /* An alpha map tinted at draw time.  All the icons arrive this way, which is
  * what lets a tell-tale change colour without a second bitmap. */
-static lv_obj_t *icon(lv_obj_t *par, const lv_img_dsc_t *src, lv_color_t c,
-                      lv_opa_t opa, lv_coord_t x, lv_coord_t y)
+static lv_obj_t *icon(lv_obj_t *par, const lv_image_dsc_t *src, lv_color_t c,
+                      lv_opa_t opa, int32_t x, int32_t y)
 {
-    lv_obj_t *i = lv_img_create(par);
+    lv_obj_t *i = lv_image_create(par);
     lv_obj_remove_style_all(i);
-    lv_img_set_src(i, src);
-    lv_obj_set_style_img_recolor(i, c, 0);
-    lv_obj_set_style_img_recolor_opa(i, LV_OPA_COVER, 0);
-    lv_obj_set_style_img_opa(i, opa, 0);
+    lv_image_set_src(i, src);
+    lv_obj_set_style_image_recolor(i, c, 0);
+    lv_obj_set_style_image_recolor_opa(i, LV_OPA_COVER, 0);
+    lv_obj_set_style_image_opa(i, opa, 0);
     lv_obj_set_pos(i, x, y);
     return i;
 }
 
 /* One of the two 290px rings, showing only the half that faces the dial.
  * `from`/`to` are LVGL arc angles: zero at three o'clock, running clockwise. */
-static lv_obj_t *ring(lv_obj_t *par, lv_coord_t x, lv_coord_t y, lv_coord_t d,
+static lv_obj_t *ring(lv_obj_t *par, int32_t x, int32_t y, int32_t d,
                       uint16_t from, uint16_t to)
 {
     lv_obj_t *a = lv_arc_create(par);
     lv_obj_remove_style_all(a);
-    lv_obj_clear_flag(a, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(a, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_pos(a, x, y);
     lv_obj_set_size(a, d, d);
     lv_arc_set_bg_angles(a, from, to);
@@ -132,7 +132,7 @@ static lv_obj_t *ring(lv_obj_t *par, lv_coord_t x, lv_coord_t y, lv_coord_t d,
  * a couple of percent thirty pixels out - so the width is set from where it
  * dies in the frame rather than from Figma's blur radius, which is not the
  * same measure. */
-static lv_obj_t *glow_dot(lv_obj_t *par, lv_coord_t x, lv_coord_t y)
+static lv_obj_t *glow_dot(lv_obj_t *par, int32_t x, int32_t y)
 {
     lv_obj_t *o = bare(par, x, y, CL_DOT_D, CL_DOT_D);
     lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
@@ -181,7 +181,7 @@ static void pool_of_light(lv_obj_t *par)
 
 static void stadium_outline(lv_obj_t *par)
 {
-    lv_coord_t d = CL_BACK_R * 2;
+    int32_t d = CL_BACK_R * 2;
 
     /* Left cap: nine o'clock round to twelve. */
     ring(par, CL_BACK_L_CX - CL_BACK_R, CL_BACK_Y, d, 180, 270);
@@ -210,7 +210,7 @@ static void stadium_outline(lv_obj_t *par)
  *  array by reference rather than copying it.
  *-------------------------------------------------------------------------*/
 
-static lv_point_t curve_pts[CL_CURVE_STEPS + 1];
+static lv_point_precise_t curve_pts[CL_CURVE_STEPS + 1];
 
 static void balance_curve(lv_obj_t *par)
 {
@@ -223,10 +223,12 @@ static void balance_curve(lv_obj_t *par)
         float a = u * u * u,     b = 3.0f * u * u * t;
         float c = 3.0f * u * t * t, d = t * t * t;
 
-        curve_pts[i].x = (lv_coord_t)(a * CL_CURVE_P0_X + b * CL_CURVE_P1_X +
-                                      c * CL_CURVE_P2_X + d * CL_CURVE_P3_X + 0.5f);
-        curve_pts[i].y = (lv_coord_t)(a * CL_CURVE_P0_Y + b * CL_CURVE_P1_Y +
-                                      c * CL_CURVE_P2_Y + d * CL_CURVE_P3_Y + 0.5f);
+        curve_pts[i].x = (lv_value_precise_t)(int32_t)
+            (a * CL_CURVE_P0_X + b * CL_CURVE_P1_X +
+             c * CL_CURVE_P2_X + d * CL_CURVE_P3_X + 0.5f);
+        curve_pts[i].y = (lv_value_precise_t)(int32_t)
+            (a * CL_CURVE_P0_Y + b * CL_CURVE_P1_Y +
+             c * CL_CURVE_P2_Y + d * CL_CURVE_P3_Y + 0.5f);
     }
 
     /* The node also carries a blurred white copy behind the stroke, but
@@ -428,42 +430,50 @@ void cl_screen_set_mode(cl_screen_t *ui, cl_mode_t mode)
 void cl_screen_create(cl_screen_t *ui)
 {
     lv_obj_t *scr = lv_obj_create(NULL);
+    lv_obj_t *root;
     lv_obj_t *bezel;
 
     lv_obj_remove_style_all(scr);
-    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(scr, CL_W, CL_H);
+    lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(scr, CL_PANEL_W, CL_PANEL_H);
     lv_obj_set_style_bg_color(scr, CL_BLACK, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    ui->screen = scr;
+    /* Everything below is placed by the Figma node's own x/y, so it all hangs
+     * off a container the size of the frame.  On a panel wider or taller than
+     * the design that container is inset by CL_ORIGIN_X/Y and the surplus
+     * stays black; where the two match it is a no-op at 0,0. */
+    root = bare(scr, CL_ORIGIN_X, CL_ORIGIN_Y, CL_W, CL_H);
 
-    pool_of_light(scr);
-    stadium_outline(scr);
+    ui->screen = scr;
+    ui->root   = root;
+
+    pool_of_light(root);
+    stadium_outline(root);
 
     /* The two rings sit above the pool but below everything that carries
      * information - nodes 1:4 and 1:5, each showing its inward-facing half. */
-    ring(scr, CL_RING_L_X, CL_RING_Y, CL_RING_D, 270, 90);
-    ring(scr, CL_RING_R_X, CL_RING_Y, CL_RING_D, 90, 270);
+    ring(root, CL_RING_L_X, CL_RING_Y, CL_RING_D, 270, 90);
+    ring(root, CL_RING_R_X, CL_RING_Y, CL_RING_D, 90, 270);
 
-    status_strip(ui, scr);
-    tell_tales(ui, scr);
-    navigation(ui, scr);
-    speed_readout(ui, scr);
-    mode_selector(ui, scr);
-    right_column(ui, scr);
-    auto_balance(ui, scr);
+    status_strip(ui, root);
+    tell_tales(ui, root);
+    navigation(ui, root);
+    speed_readout(ui, root);
+    mode_selector(ui, root);
+    right_column(ui, root);
+    auto_balance(ui, root);
 
     /* Node 1:2's own outline, and the reason it is a separate object on top
      * rather than a border on the screen: a border shrinks an object's
      * content area, which would push every absolute coordinate above one
      * pixel down and right. */
-    bezel = bare(scr, 0, 0, CL_W, CL_H);
+    bezel = bare(root, 0, 0, CL_W, CL_H);
     lv_obj_set_style_radius(bezel, CL_FRAME_RADIUS, 0);
     lv_obj_set_style_bg_opa(bezel, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_color(bezel, CL_BEZEL, 0);
     lv_obj_set_style_border_opa(bezel, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bezel, 1, 0);
 
-    lv_scr_load(scr);
+    lv_screen_load(scr);
 }

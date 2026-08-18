@@ -23,7 +23,7 @@ static cl_screen_t *s_ui;
 static void show(lv_obj_t *o, bool on)
 {
     if (!o) return;
-    if (on) lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+    if (on) lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
     else    lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
 

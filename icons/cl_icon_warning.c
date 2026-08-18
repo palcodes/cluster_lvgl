@@ -10,11 +10,17 @@
 
 #include "lvgl.h"
 
-#ifndef LV_ATTRIBUTE_MEM_ALIGN
-#define LV_ATTRIBUTE_MEM_ALIGN
+/* 64-byte alignment so the VG-Lite draw unit can take the buffer directly
+ * rather than bouncing it through a copy.  Harmless where there is no GPU. */
+#ifndef CL_IMG_ALIGN
+#if defined(__GNUC__) || defined(__clang__)
+#define CL_IMG_ALIGN __attribute__((aligned(64)))
+#else
+#define CL_IMG_ALIGN
+#endif
 #endif
 
-static const LV_ATTRIBUTE_MEM_ALIGN uint8_t cl_icon_warning_map[] = {
+static const CL_IMG_ALIGN uint8_t cl_icon_warning_map[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -73,12 +79,14 @@ static const LV_ATTRIBUTE_MEM_ALIGN uint8_t cl_icon_warning_map[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-const lv_img_dsc_t cl_icon_warning = {
-    .header.cf          = LV_IMG_CF_ALPHA_8BIT,
-    .header.always_zero = 0,
-    .header.reserved    = 0,
-    .header.w           = 28,
-    .header.h           = 28,
-    .data_size          = 784,
-    .data               = cl_icon_warning_map,
+const lv_image_dsc_t cl_icon_warning = {
+    .header.magic      = LV_IMAGE_HEADER_MAGIC,
+    .header.cf         = LV_COLOR_FORMAT_A8,
+    .header.flags      = 0,
+    .header.w          = 28,
+    .header.h          = 28,
+    .header.stride     = 28,
+    .header.reserved_2 = 0,
+    .data_size         = 784,
+    .data              = cl_icon_warning_map,
 };

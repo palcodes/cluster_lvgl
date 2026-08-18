@@ -21,7 +21,12 @@ extern "C" {
  */
 void app_cluster_init(void);
 
-/** Call in place of lv_timer_handler().  Returns the same thing it does. */
+/**
+ * Call in place of lv_timer_handler().  Returns the milliseconds to wait
+ * before the next call - lv_timer_handler()'s own answer, except that its
+ * idle LV_NO_TIMER_READY is capped to a refresh period so the value can be
+ * passed straight to vTaskDelay() or a sleep.
+ */
 uint32_t app_cluster_poll(void);
 
 /** Call from a 1 ms tick if the port does not already drive lv_tick_inc(). */

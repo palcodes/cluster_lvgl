@@ -21,7 +21,8 @@ extern "C" {
 /* Every widget the vehicle can move.  Anything not listed here is decoration
  * and is created once and never touched again. */
 typedef struct {
-    lv_obj_t *screen;
+    lv_obj_t *screen;   /* the LVGL screen, panel-sized                     */
+    lv_obj_t *root;     /* the 800 x 480 design frame inside it             */
 
     /* status strip */
     lv_obj_t *clock;

@@ -9,11 +9,11 @@ REM Needs gcc on PATH.  With MSYS2 that is C:\msys64\mingw64\bin.
 setlocal enabledelayedexpansion
 
 set "ROOT=%~dp0.."
-if "%LVGL_DIR%"=="" set "LVGL_DIR=%ROOT%\..\lvgl_src"
+if "%LVGL_DIR%"=="" set "LVGL_DIR=%ROOT%\..\gui\lvgl"
 
 if not exist "%LVGL_DIR%\lvgl.h" (
     echo LVGL not found at %LVGL_DIR%
-    echo   git clone --depth 1 -b release/v8.3 https://github.com/lvgl/lvgl.git "%LVGL_DIR%"
+    echo   git clone --depth 1 -b release/v9.4 https://github.com/lvgl/lvgl.git "%LVGL_DIR%"
     exit /b 1
 )
 

@@ -6,7 +6,7 @@ Turn the icon paths exported from Figma into LVGL alpha maps.
 
 LVGL 8.3 has no SVG renderer, so every glyph in the design has to arrive as
 image data.  Each icon here is a single filled path in a single colour, which
-makes LV_IMG_CF_ALPHA_8BIT the right container: the array stores coverage
+makes LV_COLOR_FORMAT_A8 the right container: the array stores coverage
 only, one byte per pixel, and the colour stays a runtime style property
 (`lv_obj_set_style_img_recolor`).  That is what lets the same battery glyph go
 green, amber or red without a second copy of the bitmap.
@@ -328,23 +328,31 @@ HEADER = """/*
 
 #include "lvgl.h"
 
-#ifndef LV_ATTRIBUTE_MEM_ALIGN
-#define LV_ATTRIBUTE_MEM_ALIGN
+/* 64-byte alignment so the VG-Lite draw unit can take the buffer directly
+ * rather than bouncing it through a copy.  Harmless where there is no GPU. */
+#ifndef CL_IMG_ALIGN
+#if defined(__GNUC__) || defined(__clang__)
+#define CL_IMG_ALIGN __attribute__((aligned(64)))
+#else
+#define CL_IMG_ALIGN
+#endif
 #endif
 
-static const LV_ATTRIBUTE_MEM_ALIGN uint8_t %(sym)s_map[] = {
+static const CL_IMG_ALIGN uint8_t %(sym)s_map[] = {
 """
 
 FOOTER = """};
 
-const lv_img_dsc_t %(sym)s = {
-    .header.cf          = LV_IMG_CF_ALPHA_8BIT,
-    .header.always_zero = 0,
-    .header.reserved    = 0,
-    .header.w           = %(w)d,
-    .header.h           = %(h)d,
-    .data_size          = %(bytes)d,
-    .data               = %(sym)s_map,
+const lv_image_dsc_t %(sym)s = {
+    .header.magic      = LV_IMAGE_HEADER_MAGIC,
+    .header.cf         = LV_COLOR_FORMAT_A8,
+    .header.flags      = 0,
+    .header.w          = %(w)d,
+    .header.h          = %(h)d,
+    .header.stride     = %(w)d,
+    .header.reserved_2 = 0,
+    .data_size         = %(bytes)d,
+    .data              = %(sym)s_map,
 };
 """
 

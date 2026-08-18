@@ -1,23 +1,24 @@
 # Cluster — Dashboard v2
 
 An 800 × 480 instrument cluster for an electric two-wheeler, built in LVGL
-8.3 from the Figma frame **Dashboard - v2**
+9.4 from the Figma frame **Dashboard - v2**
 ([node 1:2](https://www.figma.com/design/u7aoLFxLjCtp1zq2fgMUdD/randoms?node-id=1-2&m=dev)).
 
 ![STREET](docs/preview-street.png)
 
 That is a real frame rendered from this code, not the design. It differs
-from the Figma export on **3.35 %** of pixels by more than 8/255, and
+from the Figma export on **3.29 %** of pixels by more than 8/255, and
 essentially all of that is glyph antialiasing — every element's ink lands
 within one pixel of where the frame puts it. `test/compare_to_figma.py`
 prints the table.
 
 | | |
 |---|---|
-| **Target** | LVGL 8.3, 800 × 480 |
+| **Target** | LVGL 9.4, 800 × 480 design on a 854 × 480 canvas |
+| **Panel** | ST7701, 480 × 854 over MIPI DSI, RGB565, rotated to landscape |
 | **Type** | Bai Jamjuree Medium + Jura SemiBold/Bold (both SIL OFL) |
 | **Flash** | 131 KB of assets — 79 KB type, 52 KB images |
-| **RAM** | 384 KB for the backdrop, 96 KB for `LV_MEM_SIZE` |
+| **RAM** | 384 KB for the backdrop, plus LVGL's own heap |
 
 No animations yet, by request.
 
@@ -66,7 +67,7 @@ test/
   raw_to_png.py         framebuffer to PNG, 16 or 32 bit
   compare_to_figma.py   measure a render against the design
 mcux/
-  lv_conf.h       i.MX RT1170 config, RGB565
+  lv_conf.h       RGB565 preview config - NOT the one the board builds with
   app_cluster.h/.c    the three-call seam into an SDK project
   README.md       hardware bring-up
 archive/
@@ -87,8 +88,12 @@ Opens no window, renders to memory, writes a PNG. This is what the design
 was checked against.
 
 ```bash
-LVGL_DIR=../lvgl_src bash test/build_preview.sh
+bash test/build_preview.sh
 ```
+
+LVGL comes from `../gui/lvgl` by default - the copy inside the MCUXpresso
+project, so the preview is built against the exact LVGL the board runs. Set
+`LVGL_DIR` to point elsewhere.
 
 Then:
 
@@ -106,15 +111,20 @@ Arguments are milliseconds to run and ride mode (`0` CRAWL, `1` STREET,
 `2` RUSH). To render what the panel will actually show:
 
 ```bash
-CONF_DIR=mcux OUT=build565 LVGL_DIR=../lvgl_src bash test/build_preview.sh
+CONF_DIR=mcux OUT=build565 CL_SCREEN=854x480 bash test/build_preview.sh
 ```
+
+`CL_SCREEN=WxH` renders the panel canvas rather than the design frame on its
+own: the design stays 800 × 480 and is centred in it. Without it the preview
+is 800 × 480, which is what `compare_to_figma.py` expects.
 
 `test/raw_to_png.py` detects RGB565 from the dump size.
 
 ![RGB565](docs/preview-rgb565.png)
 
-A real 16-bit framebuffer dump. The pool banding is 16-bit colour on a
-smooth dark gradient and is inherent to the panel format.
+A real 16-bit framebuffer dump at the panel's full 854 × 480 canvas - the
+design centred, 27 px of bezel either side. The pool banding is 16-bit
+colour on a smooth dark gradient and is inherent to the panel format.
 
 ### On Windows
 
@@ -123,12 +133,12 @@ Plain Win32 + GDI — nothing to install but a compiler. Get MinGW-w64
 on PATH), then:
 
 ```bash
-git clone --depth 1 -b release/v8.3 https://github.com/lvgl/lvgl.git ../lvgl_src
+bash sim/build.sh && ./build/cluster.exe
 ```
 
-```bash
-LVGL_DIR=../lvgl_src bash sim/build.sh && ./build/cluster.exe
-```
+(LVGL again comes from `../gui/lvgl`; without that tree,
+`git clone --depth 1 -b release/v9.4 https://github.com/lvgl/lvgl.git ../lvgl_src`
+and set `LVGL_DIR`.)
 
 or `sim\build.bat` from cmd. A real 800 × 480 window opens.
 
@@ -147,7 +157,12 @@ or `sim\build.bat` from cmd. A real 800 × 480 window opens.
 
 ### On i.MX RT1170
 
-See **[mcux/README.md](mcux/README.md)**. The short version:
+Done — the UI is integrated into the MCUXpresso project in `../gui`, which
+drives an **ST7701 panel, 480 × 854 over MIPI DSI**, rotated to landscape.
+See **[mcux/README.md](mcux/README.md)** for what was changed there and what
+to check on the bench.
+
+The seam into any SDK project is still three calls:
 
 ```c
 #include "app_cluster.h"
@@ -211,16 +226,16 @@ The frame asks for three effects with no LVGL equivalent. Each is handled
 where it appears in the code, and each is worth knowing about before
 changing it.
 
-**The backdrop gradient** (node 1:3) is radial, and LVGL 8 has only linear
-gradients. Stacked shadows were the obvious workaround and they do not
-work: LVGL's shadow is a box blur bounded by `shadow_width` that allocates
-`(shadow_width + radius)² × 2` bytes to draw, so a feather wide enough to
-cross the frame costs megabytes and every affordable version leaves its own
-rectangle showing as a hard step. A small alpha map drawn zoomed does not
-work either — `lv_draw_img.c` converts an `ALPHA_8BIT` source to
-`TRUE_COLOR_ALPHA` the moment a zoom is set, drops the decoded pointer, and
-the line-reading path it falls into cannot transform, so nothing draws at
-all.
+**The backdrop gradient** (node 1:3) is radial, and LVGL has no radial
+gradient that matches it. Stacked shadows were the obvious workaround and
+they do not work: LVGL's shadow is a box blur bounded by `shadow_width` that
+allocates `(shadow_width + radius)² × 2` bytes to draw, so a feather wide
+enough to cross the frame costs megabytes and every affordable version leaves
+its own rectangle showing as a hard step. A small alpha map drawn zoomed is
+not the answer either — LVGL 8.3 refused outright, and while LVGL 9 will
+scale an A8 source, a 4× transform of a full-screen image every refresh is a
+lot of work to save 384 KB, and it resamples the gradient differently from
+the frame.
 
 So Figma's gradient is *evaluated* rather than approximated. `generate.py`
 inverts the node's own `gradientTransform`, interpolates its two stops, and
@@ -281,18 +296,21 @@ with the node it came from. Coordinates are the node's own x/y; the two
 places where Figma's numbers and its render disagree are called out in
 comments, both caused by centre-aligned strokes.
 
-**Memory.** `LV_MEM_SIZE` is 96 KB. The largest single allocation is the
-glow dots' shadow at about 20 KB — `(shadow_width + radius)² × 2`. Undersize
-it and LVGL hangs rather than reporting an error, so change it with the
-headless preview in hand. The 384 KB backdrop buffer is a static array and
-does not come out of `LV_MEM_SIZE`.
+**Memory.** The largest single allocation is the glow dots' shadow at about
+20 KB — `(shadow_width + radius)² × 2`. Undersize `LV_MEM_SIZE` and LVGL
+hangs rather than reporting an error, so change it with the headless preview
+in hand; the board's is 384 KB and has room to spare. The 384 KB backdrop
+buffer is a static array and does not come out of `LV_MEM_SIZE`.
 
 **Redraw cost.** Nothing here is expensive: the backdrop is an untransformed
 alpha blit, the two rings and the AUTO BALANCE curve are thin strokes, and
 the only shadows left are the two glow dots and the warning halo. Setting
 `shadow_width` to 0 on those three is the one lever, and it is style-only.
 
-**Another resolution.** Positions are absolute. `CL_W`/`CL_H` and the
-geometry block in `cl_theme.h` are where to start — and `generate.py` needs
+**Another resolution.** Positions are absolute, inside a container the size
+of the design. A panel *larger* than the frame needs nothing but
+`CL_PANEL_W`/`CL_PANEL_H`, which centre the design in it — that is how the
+854-wide ST7701 is handled. To actually redraw at another size, `CL_W`/`CL_H`
+and the geometry block in `cl_theme.h` are where to start — and `generate.py` needs
 its `POOL_*` constants moved with them, since the gradient is baked against
 the 800 × 480 frame.

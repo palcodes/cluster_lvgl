@@ -11,11 +11,17 @@
 
 #include "lvgl.h"
 
-#ifndef LV_ATTRIBUTE_MEM_ALIGN
-#define LV_ATTRIBUTE_MEM_ALIGN
+/* 64-byte alignment so the VG-Lite draw unit can take the buffer directly
+ * rather than bouncing it through a copy.  Harmless where there is no GPU. */
+#ifndef CL_IMG_ALIGN
+#if defined(__GNUC__) || defined(__clang__)
+#define CL_IMG_ALIGN __attribute__((aligned(64)))
+#else
+#define CL_IMG_ALIGN
+#endif
 #endif
 
-static const LV_ATTRIBUTE_MEM_ALIGN uint8_t cl_glow_pill_map[] = {
+static const CL_IMG_ALIGN uint8_t cl_glow_pill_map[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20,
     0x3e, 0x5b, 0x62, 0x77, 0x77, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76,
     0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76,
@@ -434,12 +440,14 @@ static const LV_ATTRIBUTE_MEM_ALIGN uint8_t cl_glow_pill_map[] = {
     0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-const lv_img_dsc_t cl_glow_pill = {
-    .header.cf          = LV_IMG_CF_ALPHA_8BIT,
-    .header.always_zero = 0,
-    .header.reserved    = 0,
-    .header.w           = 128,
-    .header.h           = 52,
-    .data_size          = 6656,
-    .data               = cl_glow_pill_map,
+const lv_image_dsc_t cl_glow_pill = {
+    .header.magic      = LV_IMAGE_HEADER_MAGIC,
+    .header.cf         = LV_COLOR_FORMAT_A8,
+    .header.flags      = 0,
+    .header.w          = 128,
+    .header.h          = 52,
+    .header.stride     = 128,
+    .header.reserved_2 = 0,
+    .data_size         = 6656,
+    .data              = cl_glow_pill_map,
 };

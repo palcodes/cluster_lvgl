@@ -1,8 +1,9 @@
-build/
-build565/
-fonts/.ttf/
 *.bin
 *.exe
 *.o
 *.rsp
 __pycache__/
+build/
+build565/
+build854/
+fonts/.ttf/

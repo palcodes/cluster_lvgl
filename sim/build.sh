@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Build the Windows simulator.  Run from anywhere:
-#   LVGL_DIR=../lvgl_src bash sim/build.sh
+#   bash sim/build.sh
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LVGL_DIR="${LVGL_DIR:-$ROOT/../lvgl_src}"
+LVGL_DIR="${LVGL_DIR:-$ROOT/../gui/lvgl}"
 OUT="${OUT:-$ROOT/build}"
 
 if [ ! -f "$LVGL_DIR/lvgl.h" ]; then
     echo "LVGL not found at $LVGL_DIR"
-    echo "  git clone --depth 1 -b release/v8.3 https://github.com/lvgl/lvgl.git \"$LVGL_DIR\""
+    echo "  git clone --depth 1 -b release/v9.4 https://github.com/lvgl/lvgl.git \"$LVGL_DIR\""
     exit 1
 fi
 

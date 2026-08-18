@@ -18,7 +18,7 @@ extern "C" {
 #include "cl_theme.h"
 
 /** The full-size map.  Not valid until cl_pool_build() has run. */
-extern lv_img_dsc_t cl_pool;
+extern lv_image_dsc_t cl_pool;
 
 /** Expand the quarter-scale asset into it.  Called by cl_screen_create(). */
 void cl_pool_build(void);

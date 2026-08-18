@@ -35,6 +35,27 @@ extern "C" {
 #define CL_H                    480
 #define CL_FRAME_RADIUS         6                   /* node 1:2            */
 
+/* The design is 800 x 480 and every coordinate below is absolute within it.
+ * The panel need not be: the ST7701 cluster runs 480 x 854 portrait, which
+ * the display port rotates into an 854 x 480 landscape canvas - 54 px wider
+ * than the frame.  So the screen is CL_PANEL_W x CL_PANEL_H and the design
+ * is placed inside it at CL_ORIGIN_X/Y, leaving the surplus as bezel either
+ * side.  Nothing else in the UI has to know: cl_screen_create() parents every
+ * widget to that container, so the node coordinates stay untouched and the
+ * render stays comparable against the Figma frame.
+ *
+ * Define CL_PANEL_W/CL_PANEL_H in the build (the MCUXpresso project passes
+ * -DCL_PANEL_W=854 -DCL_PANEL_H=480).  Undefined, the screen is the frame. */
+#ifndef CL_PANEL_W
+#define CL_PANEL_W             CL_W
+#endif
+#ifndef CL_PANEL_H
+#define CL_PANEL_H             CL_H
+#endif
+
+#define CL_ORIGIN_X             ((CL_PANEL_W - CL_W) / 2)
+#define CL_ORIGIN_Y             ((CL_PANEL_H - CL_H) / 2)
+
 /**********************
  *       COLOURS
  **********************/

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and run the headless preview on a PC.
 #
-#   LVGL_DIR=../lvgl_src bash test/build_preview.sh [run_ms] [mode]
+#   bash test/build_preview.sh [run_ms] [mode]
 #
 # mode: 0 = CRAWL, 1 = STREET, 2 = RUSH
 #
@@ -14,14 +14,21 @@
 # version, point it at the RT1170 config - raw_to_png.py works out the depth
 # from the dump size:
 #
-#   CONF_DIR=mcux OUT=build565 LVGL_DIR=../lvgl_src bash test/build_preview.sh
+#   CONF_DIR=mcux OUT=build565 bash test/build_preview.sh
 #
-# Needs: gcc (MSYS2 mingw64 works), python3, and an LVGL 8.3 checkout.
+# To render the 854 x 480 canvas the ST7701 panel actually gets, rather than
+# the 800 x 480 design frame on its own:
+#
+#   CL_SCREEN=854x480 bash test/build_preview.sh
+#
+# Needs: gcc (MSYS2 works), python3, and an LVGL 9.4 checkout - by default
+# the one inside the MCUXpresso project, so the preview is built against the
+# exact LVGL the board runs.
 
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LVGL_DIR="${LVGL_DIR:-$ROOT/../lvgl_src}"
+LVGL_DIR="${LVGL_DIR:-$ROOT/../gui/lvgl}"
 CONF_DIR="${CONF_DIR:-$ROOT/sim}"
 OUT="${OUT:-$ROOT/build}"
 RUN_MS="${1:-500}"
@@ -29,8 +36,15 @@ MODE="${2:-1}"
 
 if [ ! -f "$LVGL_DIR/lvgl.h" ]; then
     echo "LVGL not found at $LVGL_DIR"
-    echo "  git clone --depth 1 -b release/v8.3 https://github.com/lvgl/lvgl.git \"$LVGL_DIR\""
+    echo "  set LVGL_DIR, or:"
+    echo "  git clone --depth 1 -b release/v9.4 https://github.com/lvgl/lvgl.git \"$LVGL_DIR\""
     exit 1
+fi
+
+# CL_SCREEN=WxH sizes the panel canvas; the design stays 800 x 480 inside it.
+SCREEN_DEF=""
+if [ -n "$CL_SCREEN" ]; then
+    SCREEN_DEF="-DCL_PANEL_W=${CL_SCREEN%x*} -DCL_PANEL_H=${CL_SCREEN#*x}"
 fi
 
 mkdir -p "$OUT"
@@ -50,7 +64,7 @@ if [ ! -f "$LIB" ] || [ "$CONF_DIR/lv_conf.h" -nt "$LIB" ]; then
     rm -rf "$OBJ"
 fi
 
-gcc -O1 -Wall -Wextra -DLV_CONF_INCLUDE_SIMPLE \
+gcc -O1 -Wall -Wextra -DLV_CONF_INCLUDE_SIMPLE $SCREEN_DEF \
     -I"$CONF_DIR" -I"$LVGL_DIR" -I"$ROOT/ui" -I"$ROOT/app" \
     "$ROOT/test/render_preview.c" \
     "$ROOT/ui/cl_screen.c" \
@@ -63,5 +77,5 @@ gcc -O1 -Wall -Wextra -DLV_CONF_INCLUDE_SIMPLE \
     -o "$OUT/render_preview"
 
 "$OUT/render_preview" "$RUN_MS" "$OUT/frame.bin" "$MODE"
-python "$ROOT/test/raw_to_png.py" "$OUT/frame.bin" "$OUT/preview.png"
+python "$ROOT/test/raw_to_png.py" "$OUT/frame.bin" "$OUT/preview.png" ${CL_SCREEN:+${CL_SCREEN%x*} ${CL_SCREEN#*x}}
 echo "-> $OUT/preview.png"
